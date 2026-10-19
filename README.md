@@ -36,7 +36,8 @@ slackcache serve --channel slackcache
 ```
 
 SlackCache creates `#slackcache` if it is missing, joins it and loads every key already there.
-Any Redis client can now use `redis://127.0.0.1:6380`.
+Any Redis client can now use `redis://127.0.0.1:6380`. Slack does not add you to channels a bot
+creates, so find `#slackcache` under **Browse channels**.
 
 ## How it works
 
@@ -99,9 +100,18 @@ export ANTHROPIC_API_KEY=... SLACKCACHE_TOKEN=xoxb-...
 python examples/llm_cache.py --slack slackcache-demo --shards 8
 ```
 
-With an in-memory channel, `claude-opus-5-5` answered all 300 in 99 s for $0.80. After the
-restart, all 300 came back from the cache in 0.28 s for $0. Use `--offline` to run it without
-Claude, or omit `--slack` to use in-memory channels.
+Live on a free workspace (2026-10-19, one channel):
+
+| Run | Cache hits | Time | Claude cost |
+| --- | --- | --- | --- |
+| Cold cache | 0/300 | 254.5 s | $0.80 |
+| After restarting SlackCache from Slack (300 keys loaded in 0.59 s) | 300/300 | 0.20 s | $0.00 |
+
+Asked to explain a database "to someone who thinks Slack is a database", Claude answered:
+"Slack keeps your messages, but it's like a giant group chat where finding something means
+scrolling or hoping search guesses right." It is now cached in Slack.
+
+Use `--offline` to run it without Claude, or omit `--slack` to use in-memory channels.
 
 ## Supported commands
 
@@ -121,6 +131,8 @@ FLUSHDB FLUSHALL TIME CONFIG CLIENT COMMAND MULTI EXEC DISCARD WATCH`. No lists,
 - An app installed only in your own workspace keeps Tier 3 history reads. Slack's 2025 limit
   of one history read per minute applies to commercially distributed apps, not to this one.
 - Free workspaces allow 10 app installations.
+- A throttled write can take several seconds, so give your Redis client a socket timeout of a
+  minute or more.
 - MULTI/EXEC runs commands in order but is not isolated from other servers. INCR is atomic
   within one server only.
 

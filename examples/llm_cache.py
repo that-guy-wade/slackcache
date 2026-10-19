@@ -82,7 +82,8 @@ def ask(cache, question, ask_model):
 def run(channels, questions, ask_model, workers, label):
     """Start a fresh SlackCache server on the channels, ask every question, then shut it down."""
     port, stop = start_in_thread(Store(*channels))
-    cache = redis.Redis(port=port, max_connections=workers)
+    # Writes wait for Slack, which can throttle for seconds; real Redis answers in microseconds.
+    cache = redis.Redis(port=port, max_connections=workers, socket_timeout=300)
     started = time.perf_counter()
     try:
         with ThreadPoolExecutor(workers) as pool:
