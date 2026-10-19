@@ -88,6 +88,9 @@ class SlackChannel:
             unfurl_links=False,
             unfurl_media=False,
         )
+        if result["message"]["text"] != text:  # Never report a write Slack truncated or rewrote.
+            self.delete(result["ts"])
+            raise SlackError("chat.postMessage stored different text than was sent")
         return result["ts"]
 
     def delete(self, ts):

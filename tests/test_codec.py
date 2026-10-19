@@ -33,7 +33,7 @@ def test_preview_is_readable_and_bounded():
 
 def test_rejects_values_slack_would_truncate():
     with pytest.raises(codec.ValueTooLarge):
-        codec.encode(b"k", b"x" * 30_000)
+        codec.encode(b"k", b"x" * 12_000)
 
 
 @pytest.mark.parametrize(

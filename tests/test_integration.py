@@ -47,7 +47,7 @@ def test_store_errors_become_redis_errors(channel):
 
     try:
         with pytest.raises(redis.ResponseError, match="too large for a Slack message"):
-            client.set("big", b"x" * 40_000)
+            client.set("big", b"x" * 12_000)
         client.set("n", "not a number")
         with pytest.raises(redis.ResponseError, match="not an integer"):
             client.incr("n")

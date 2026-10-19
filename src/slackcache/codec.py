@@ -4,7 +4,7 @@ import base64
 from datetime import datetime, timezone
 
 MARKER = "slackcache:v1"
-MAX_TEXT = 39_000  # Slack truncates message text past 40,000 characters.
+MAX_TEXT = 16_000  # Measured: Slack cuts `text` to 16,000 characters when a message has blocks.
 PREVIEW = 1_500
 
 

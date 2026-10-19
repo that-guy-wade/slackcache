@@ -148,7 +148,7 @@ def test_flush_deletes_every_slackcache_message_but_not_chat(store, channel):
 
 def test_too_large_values_are_rejected_without_writing(store, channel):
     with pytest.raises(codec.ValueTooLarge):
-        store.set(b"k", b"x" * 40_000)
+        store.set(b"k", b"x" * 12_000)
     assert channel.posted == {} and store.get(b"k") is None
 
 

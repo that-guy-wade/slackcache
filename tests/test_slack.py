@@ -5,7 +5,7 @@ import urllib.parse
 
 import pytest
 
-from slackcache.slack import FakeChannel, SlackAPI, SlackError, open_channels
+from slackcache.slack import FakeChannel, SlackAPI, SlackChannel, SlackError, open_channels
 
 
 class FakeHTTP:
@@ -108,3 +108,20 @@ def test_fake_channel_orders_newest_first():
     assert [ts for ts, _ in channel.messages()] == [second, first]
     channel.delete(first)
     assert list(channel.messages()) == [(second, "b")]
+
+
+def test_post_rejects_and_removes_a_message_slack_altered():
+    http = FakeHTTP(
+        {
+            "chat.postMessage": [
+                {"ok": True, "ts": "1.0", "message": {"text": "abc"}},
+                {"ok": True, "ts": "2.0", "message": {"text": "ab"}},
+            ],
+            "chat.delete": {"ok": True},
+        }
+    )
+    channel = SlackChannel(SlackAPI("t", http=http), "C1", "cache", "B1")
+    assert channel.post("abc", []) == "1.0"
+    with pytest.raises(SlackError, match="different text"):
+        channel.post("abc", [])
+    assert http.requests[-1][0] == "chat.delete" and http.requests[-1][1]["ts"] == "2.0"

@@ -56,15 +56,27 @@ Writes post a new message and delete the key's previous one, so the channel alwa
 message per live key, newest at the bottom. If two servers write the same key, the message with
 the later Slack timestamp wins and the older one is deleted.
 
-Reads come from memory, so GETs are fast. Writes run at Slack's posting limit of about one
-message per second per channel.
+Reads come from memory, so GETs are fast. Writes wait for Slack.
+
+## Benchmarks
+
+`redis-benchmark` against a free Slack workspace, 2026-10-19 (random keys, `-q`):
+
+| Setup | SET | GET |
+| --- | --- | --- |
+| 1 channel (`-n 120 -c 8`) | 1.70 requests/s, p50 1,636 ms | 7,716 requests/s, p50 0.96 ms |
+| 8 channels (`-n 480 -c 32`) | 18.93 requests/s, p50 983 ms | 6,680 requests/s, p50 1.08 ms |
+
+GET is about 4,500 times faster than SET. With 8 channels, writes ran at about 30 per second
+for the first 400 messages, then Slack throttled the app to about 4 per second.
 
 ## Cluster mode
 
 Slack's posting limit is per channel, so SlackCache scales writes the way Redis Cluster does:
 more shards. `--shards 8` spreads keys over `#slackcache-1` … `#slackcache-8` using Redis
-Cluster's own hash slots (CRC16 mod 16384, with `{hash tags}`). Each channel writes in
-parallel, adding roughly one write per second. Clients still connect to one endpoint.
+Cluster's own hash slots (CRC16 mod 16384, with `{hash tags}`). Channels write in parallel:
+8 channels measured 11 times the write throughput of one, until Slack's app-wide throttle.
+Clients still connect to one endpoint.
 
 ```sh
 slackcache serve --shards 8
@@ -100,7 +112,9 @@ FLUSHDB FLUSHALL TIME CONFIG CLIENT COMMAND MULTI EXEC DISCARD WATCH`. No lists,
 
 ## Limits
 
-- One key and value must fit in one Slack message: about 29 KB of value.
+- One key and value must fit in one Slack message: about 11.9 KB of value. Slack documents a
+  40,000-character limit, but it cut our messages to 16,000. Every write checks that Slack
+  stored exactly what was sent.
 - `chat.postMessage` allows about one message per second per channel, with short bursts.
   Deletes and history reads are Tier 3 (about 50 per minute). `FLUSHALL` on a large keyspace
   takes minutes.
