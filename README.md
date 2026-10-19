@@ -59,19 +59,37 @@ the later Slack timestamp wins and the older one is deleted.
 Reads come from memory, so GETs are fast. Writes run at Slack's posting limit of about one
 message per second per channel.
 
+## Cluster mode
+
+Slack's posting limit is per channel, so SlackCache scales writes the way Redis Cluster does:
+more shards. `--shards 8` spreads keys over `#slackcache-1` … `#slackcache-8` using Redis
+Cluster's own hash slots (CRC16 mod 16384, with `{hash tags}`). Each channel writes in
+parallel, adding roughly one write per second. Clients still connect to one endpoint.
+
+```sh
+slackcache serve --shards 8
+```
+
+Changing the shard count is safe. Keys stay readable in their old channel and move to their new
+one the next time they are written.
+
 ## Demo: cache Claude's answers in Slack
 
-[`examples/llm_cache.py`](examples/llm_cache.py) asks Claude twenty questions through the
-official Anthropic SDK, caching each answer through an unmodified redis-py client. It then
-restarts SlackCache from the channel alone and asks again:
+[`examples/llm_cache.py`](examples/llm_cache.py) asks Claude 300 questions ("Explain an LSM
+tree to a pirate", "Explain the CAP theorem to a golden retriever", …) through the official
+Anthropic SDK, eight at a time, caching each answer through an unmodified redis-py client. Each
+answer becomes a readable Slack message. It then restarts SlackCache from the channels alone and
+asks again:
 
 ```sh
 pip install anthropic
-export ANTHROPIC_API_KEY=...
-python examples/llm_cache.py --slack slackcache
+export ANTHROPIC_API_KEY=... SLACKCACHE_TOKEN=xoxb-...
+python examples/llm_cache.py --slack slackcache-demo --shards 8
 ```
 
-Use `--offline` to run it without Claude, or omit `--slack` to use an in-memory channel.
+With an in-memory channel, `claude-opus-5-5` answered all 300 in 99 s for $0.80. After the
+restart, all 300 came back from the cache in 0.28 s for $0. Use `--offline` to run it without
+Claude, or omit `--slack` to use in-memory channels.
 
 ## Supported commands
 

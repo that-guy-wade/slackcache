@@ -5,7 +5,7 @@ import urllib.parse
 
 import pytest
 
-from slackcache.slack import FakeChannel, SlackAPI, SlackChannel, SlackError
+from slackcache.slack import FakeChannel, SlackAPI, SlackError, open_channels
 
 
 class FakeHTTP:
@@ -84,18 +84,22 @@ def test_channel_finds_joins_and_reads_only_its_own_messages():
             {"ok": True, "messages": [{"ts": "1.0", "text": "other bot", "bot_id": "B2"}]},
         ]
     )
-    channel = SlackChannel(SlackAPI("t", http=http), "#slackcache")
-    assert channel.id == "C9" and channel.bot_id == "B1"
+    [channel] = open_channels(SlackAPI("t", http=http), ["#slackcache"])
+    assert channel.id == "C9" and channel.bot_id == "B1" and channel.name == "slackcache"
     assert list(channel.messages()) == [("3.0", "mine")]
     assert http.requests[2][1]["cursor"] == "page2"
     channel.delete("3.0")  # already gone is fine
 
 
-def test_channel_is_created_when_missing():
+def test_missing_channels_are_created_and_the_workspace_is_listed_once():
     http = channel_http([])
-    http.responses["conversations.list"] = {"ok": True, "channels": []}
+    http.responses["conversations.list"] = {"ok": True, "channels": [{"id": "C1", "name": "c-1"}]}
     http.responses["conversations.create"] = {"ok": True, "channel": {"id": "CNEW"}}
-    assert SlackChannel(SlackAPI("t", http=http), "cache").id == "CNEW"
+    channels = open_channels(SlackAPI("t", http=http), ["c-1", "c-2"])
+    assert [channel.id for channel in channels] == ["C1", "CNEW"]
+    methods = [method for method, _, _ in http.requests]
+    assert methods.count("conversations.list") == 1 and methods.count("auth.test") == 1
+    assert methods.count("conversations.join") == 2
 
 
 def test_fake_channel_orders_newest_first():

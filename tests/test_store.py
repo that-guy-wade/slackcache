@@ -1,10 +1,12 @@
+import binascii
 import threading
+import time
 
 import pytest
 
 from slackcache import codec
 from slackcache.slack import FakeChannel
-from slackcache.store import FREE_PLAN_HORIZON_MS, REAP_PER_PASS, Store
+from slackcache.store import FREE_PLAN_HORIZON_MS, REAP_PER_PASS, Store, key_slot
 
 
 class Clock:
@@ -176,3 +178,51 @@ def test_maintain_reaps_and_syncs_until_stopped(store, channel, clock):
     stop.set()
     thread.join(1)
     assert other.get(b"k") == b"v" and not thread.is_alive()
+
+
+def test_key_slot_matches_redis_cluster():
+    assert key_slot(b"foo") == 12182 and key_slot(b"bar") == 5061
+    assert key_slot(b"{user1000}.following") == key_slot(b"{user1000}.followers")
+    assert key_slot(b"foo{}{bar}") == binascii.crc_hqx(b"foo{}{bar}", 0) % 16384  # empty tag
+
+
+def test_cluster_spreads_keys_and_survives_a_restart(clock):
+    channels = [FakeChannel(f"cache-{i}", clock=clock) for i in range(4)]
+    store = Store(*channels, clock=clock)
+    for i in range(200):
+        store.set(b"key:%d" % i, b"%d" % i)
+    counts = [len(channel.posted) for channel in channels]
+    assert sum(counts) == 200 and min(counts) > 30
+    store.delete([b"key:0"])
+    restarted = Store(*channels, clock=clock)
+    assert len(restarted.keys()) == 199 and restarted.get(b"key:199") == b"199"
+    assert restarted.info()["slack_channels"] == "#cache-0,#cache-1,#cache-2,#cache-3"
+
+
+def test_resharding_moves_keys_on_their_next_write(clock):
+    one = FakeChannel("one", clock=clock)
+    Store(one, clock=clock).set(b"k", b"old")
+    two = FakeChannel("two", clock=clock)
+    store = Store(one, two, clock=clock)
+    assert store.get(b"k") == b"old"
+    store.set(b"k", b"new")
+    assert sum(len(channel.posted) for channel in (one, two)) == 1
+    assert Store(one, two, clock=clock).get(b"k") == b"new"
+
+
+def test_shards_write_in_parallel(clock):
+    class SlowChannel(FakeChannel):
+        def post(self, text, blocks):
+            time.sleep(0.2)
+            return super().post(text, blocks)
+
+    store = Store(*(SlowChannel(f"s{i}", clock=clock) for i in range(4)), clock=clock)
+    keys = [b"a", b"b", b"c", b"d"]
+    assert len({store._shard(key) for key in keys}) == 4
+    started = time.perf_counter()
+    threads = [threading.Thread(target=store.set, args=(key, b"v")) for key in keys]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert time.perf_counter() - started < 0.6

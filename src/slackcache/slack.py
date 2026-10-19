@@ -45,35 +45,39 @@ class SlackAPI:
             return result
 
 
+def open_channels(api, names):
+    """Find, create and join public channels by name or ID, listing the workspace once."""
+    bot_id = api.call("auth.test")["bot_id"]
+    known, cursor = {}, None
+    while True:
+        result = api.call(
+            "conversations.list",
+            types="public_channel",
+            exclude_archived=True,
+            limit=1000,
+            cursor=cursor,
+        )
+        for channel in result["channels"]:
+            known[channel["name"]] = known[channel["id"]] = channel["id"]
+        cursor = result.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            break
+    channels = []
+    for name in (name.lstrip("#") for name in names):
+        channel_id = known.get(name) or api.call("conversations.create", name=name)["channel"]["id"]
+        api.call("conversations.join", channel=channel_id)
+        channels.append(SlackChannel(api, channel_id, name, bot_id))
+    return channels
+
+
 class SlackChannel:
     """A public channel that stores one message per key, written by this app's bot."""
 
-    def __init__(self, api, channel="slackcache"):
+    def __init__(self, api, channel_id, name, bot_id):
         self._api = api
-        self.bot_id = api.call("auth.test")["bot_id"]
-        self.name = channel.lstrip("#")
-        self.id = (
-            self._find(self.name)
-            or api.call("conversations.create", name=self.name)["channel"]["id"]
-        )
-        api.call("conversations.join", channel=self.id)
-
-    def _find(self, name):
-        cursor = None
-        while True:
-            result = self._api.call(
-                "conversations.list",
-                types="public_channel",
-                exclude_archived=True,
-                limit=1000,
-                cursor=cursor,
-            )
-            for channel in result["channels"]:
-                if name in (channel["id"], channel["name"]):
-                    return channel["id"]
-            cursor = result.get("response_metadata", {}).get("next_cursor")
-            if not cursor:
-                return None
+        self.id = channel_id
+        self.name = name
+        self.bot_id = bot_id
 
     def post(self, text, blocks):
         result = self._api.call(
@@ -111,10 +115,9 @@ class SlackChannel:
 class FakeChannel:
     """An in-memory channel for --dry-run and tests. Several stores may share one."""
 
-    name = "slackcache-dry-run"
-    id = "CDRYRUN"
-
-    def __init__(self, clock=time.time):
+    def __init__(self, name="slackcache-dry-run", clock=time.time):
+        self.name = name
+        self.id = "C" + name.upper()
         self._clock = clock
         self._counter = itertools.count()
         self.posted = {}

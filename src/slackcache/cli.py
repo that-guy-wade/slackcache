@@ -9,19 +9,22 @@ import sys
 import threading
 
 from .server import serve
-from .slack import FakeChannel, SlackAPI, SlackChannel, SlackError
+from .slack import FakeChannel, SlackAPI, SlackError, open_channels
 from .store import Store
 
 TOKEN_ENV = "SLACKCACHE_TOKEN"
 
 
-def _channel(args):
+def _channels(args):
+    names = [args.channel]
+    if args.shards > 1:
+        names = [f"{args.channel}-{shard}" for shard in range(1, args.shards + 1)]
     if args.dry_run:
-        return FakeChannel()
+        return [FakeChannel(name) for name in names]
     token = os.environ.get(TOKEN_ENV)
     if not token:
         raise SlackError(f"set {TOKEN_ENV} to your Slack app's bot token (xoxb-...)")
-    return SlackChannel(SlackAPI(token), args.channel)
+    return open_channels(SlackAPI(token), names)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -31,6 +34,13 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser.add_argument("--channel", default="slackcache", help="public channel name or ID")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=6380)
+    serve_parser.add_argument(
+        "--shards",
+        type=int,
+        default=1,
+        metavar="N",
+        help="spread keys over N channels (CHANNEL-1..N); each adds ~1 write/second",
+    )
     serve_parser.add_argument(
         "--sync-every",
         type=float,
@@ -43,8 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        channel = _channel(args)
-        store = Store(channel)
+        channels = _channels(args)
+        store = Store(*channels)
     except SlackError as error:
         print(f"slackcache: {error}", file=sys.stderr)
         return 1
@@ -54,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     ).start()
     print(
         f"SlackCache ready on redis://{args.host}:{args.port} "
-        f"(#{channel.name}, {len(store.keys())} keys loaded)",
+        f"({store.info()['slack_channels']}, {len(store.keys())} keys loaded)",
         flush=True,
     )
     try:
