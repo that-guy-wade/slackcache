@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "slackcache"
+version = "0.1.0"
+description = "A Redis-compatible cache stored in a free Slack workspace. Eviction policy: the free plan."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "SlackCache" }]
+keywords = ["redis", "cache", "slack", "database", "satire"]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/that-guy-wade/slackcache"
+Repository = "https://github.com/that-guy-wade/slackcache"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.9", "radon>=6", "build>=1", "redis>=5"]
+
+[project.scripts]
+slackcache = "slackcache.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slackcache"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "C901"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

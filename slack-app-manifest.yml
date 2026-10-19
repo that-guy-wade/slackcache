@@ -1,0 +1,23 @@
+_metadata:
+  major_version: 2
+  minor_version: 1
+display_information:
+  name: SlackCache
+  description: A Redis-compatible cache. Eviction policy is the free plan.
+  background_color: "#d82c20"
+features:
+  bot_user:
+    display_name: slackcache
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - channels:read
+      - channels:history
+      - channels:join
+      - channels:manage
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
