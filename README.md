@@ -122,8 +122,10 @@ FLUSHDB FLUSHALL TIME CONFIG CLIENT COMMAND MULTI EXEC DISCARD WATCH`. No lists,
 
 ## Limits
 
-- One key and value must fit in one Slack message: about 11.9 KB of value. Slack documents a
-  40,000-character limit, but it cut our messages to 16,000. Every write checks that Slack
+- One key and value must fit in one Slack message: about 11.9 KB of value. Slack's docs give
+  40,000 characters for message text, and say that with blocks the limit depends on the block
+  type. In our tests, text sent with blocks was cut to exactly 16,000 characters, and text sent
+  without blocks was split into separate 4,000-character messages. Every write checks that Slack
   stored exactly what was sent.
 - `chat.postMessage` allows about one message per second per channel, with short bursts.
   Deletes and history reads are Tier 3 (about 50 per minute). `FLUSHALL` on a large keyspace
