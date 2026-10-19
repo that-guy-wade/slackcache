@@ -1,6 +1,6 @@
 1/3 Is it a database? SlackCache is a NEW, entirely FREE Redis-compatible cache.
 
-Every key is a Slack message. Free Slack hides messages after 90 days, so we called it an eviction policy.
+Every key is a Slack message. Slack's free plan was already deleting our data, so we called it a cache.
 
 GET: 7,716 requests/sec
 SET: 1.70 requests/sec
